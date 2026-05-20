@@ -186,7 +186,7 @@ bool Application::Initialize(size_t argc, LPCTSTR* argv)
 	// validate input
 	Util::ensureValidPath(OPT::strSource);
 	if (OPT::vm.count("help") || OPT::strSource.empty()) {
-		GET_LOG() << cmdline_options;
+		std::cout << cmdline_options << std::endl;
 		if (OPT::strSource.empty())
 			LOG("error: source (folder or list) is required");
 		return false;

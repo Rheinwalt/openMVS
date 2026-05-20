@@ -161,7 +161,7 @@ bool Application::Initialize(size_t argc, LPCTSTR* argv)
 	// validate input
 	Util::ensureValidPath(OPT::strInputFileName);
 	if (OPT::vm.count("help") || OPT::strInputFileName.empty()) {
-		GET_LOG() << cmdline_options;
+		std::cout << cmdline_options << std::endl;
 		if (OPT::strInputFileName.empty())
 			LOG("error: input video file is required");
 		return false;
@@ -304,4 +304,3 @@ int main(int argc, LPCTSTR* argv)
 	return EXIT_SUCCESS;
 }
 /*----------------------------------------------------------------*/
-

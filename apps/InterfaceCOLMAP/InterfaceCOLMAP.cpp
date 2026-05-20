@@ -171,12 +171,12 @@ bool Application::Initialize(size_t argc, LPCTSTR* argv)
 	if (OPT::vm.count("help") || bInvalidCommand) {
 		boost::program_options::options_description visible("Available options");
 		visible.add(generic).add(config);
-		GET_LOG() << _T("\n"
+		std::cout << _T("\n"
 			"Import/export 3D reconstruction from COLMAP (TXT/BIN format) and to COLMAP (TXT format). \n"
 			"In order to import a scene, run COLMAP SfM and next undistort the images (only PINHOLE\n"
 			"camera model supported for the moment)."
 			"\n")
-			<< visible;
+			<< visible << std::endl;
 	}
 	if (bInvalidCommand)
 		return false;

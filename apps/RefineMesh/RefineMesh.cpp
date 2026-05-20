@@ -173,7 +173,7 @@ bool Application::Initialize(size_t argc, LPCTSTR* argv)
 	if (OPT::vm.count("help") || OPT::strInputFileName.empty()) {
 		boost::program_options::options_description visible("Available options");
 		visible.add(generic).add(config);
-		GET_LOG() << visible;
+		std::cout << visible << std::endl;
 	}
 	if (OPT::strInputFileName.empty())
 		return false;

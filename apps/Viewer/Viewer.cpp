@@ -159,9 +159,9 @@ bool Application::Initialize(size_t argc, LPCTSTR* argv)
 	if (OPT::vm.count("help")) {
 		boost::program_options::options_description visible("Available options");
 		visible.add(generic).add(config);
-		GET_LOG() << _T("\n"
+		std::cout << _T("\n"
 			"Visualize any know point-cloud/mesh formats or MVS projects. Supply files through command line or Drag&Drop.\n")
-			<< visible;
+			<< visible << std::endl;
 	}
 	if (!OPT::strExportType.empty())
 		OPT::strExportType = OPT::strExportType.ToLower() == _T("obj") ? _T(".obj") : _T(".ply");
