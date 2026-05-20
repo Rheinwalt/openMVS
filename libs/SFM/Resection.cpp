@@ -209,7 +209,7 @@ bool Resection::RegisterImages()
 			if ((config.fullBAEvery[nBA] > 0 && sinceFullBA >= config.fullBAEvery[nBA]) || (config.avgInliersRatioForceBA > 0.f && avgInliersRatio.GetAverage() < config.avgInliersRatioForceBA)) {
 				// Full BA every N registered images
 				TriangulateTracks(scene, false, config.maxReprojError, config.minAngleThreshold);
-				if (config.minRefineExtIntrs > 0 && scene.status.nCalibratedImages + registeredCount >= config.minRefineExtIntrs)
+				if (config.refineIntrinsics && config.minRefineExtIntrs > 0 && scene.status.nCalibratedImages + registeredCount >= config.minRefineExtIntrs)
 					config.fullBAConfig.RefineExtendedIntrinsics();
 				BundleAdjustment::Adjust(scene, config.fullBAConfig);
 				FilterTracks(scene, config.maxReprojError, config.minAngleThreshold, config.multDepthNear, config.multDepthFar);
@@ -244,7 +244,8 @@ bool Resection::RegisterImages()
 	// Full BA after all images are registered
 	TriangulateTracks(scene, false, config.maxReprojError, config.minAngleThreshold);
 	config.fullBAConfig.maxIterations = 100;
-	config.fullBAConfig.RefineExtendedIntrinsics();
+	if (config.refineIntrinsics)
+		config.fullBAConfig.RefineExtendedIntrinsics();
 	BundleAdjustment::Adjust(scene, config.fullBAConfig);
 	FilterTracks(scene, config.maxReprojError, config.minAngleThreshold, config.multDepthNear, config.multDepthFar);
 

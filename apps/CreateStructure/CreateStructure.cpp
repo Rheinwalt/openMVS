@@ -65,6 +65,7 @@ bool releaseDescriptors;
 bool matchImagesOnly;
 float defaultFocalRatio;
 float focalLength;
+bool fixedIntrinsics;
 float k1;
 float k2;
 String strImageIndices;
@@ -142,6 +143,7 @@ bool Application::Initialize(size_t argc, LPCTSTR* argv)
 		("match-images-only", boost::program_options::value(&OPT::matchImagesOnly)->default_value(false), "match only the image pairs and save the scene without reconstruction (release descriptors)")
 		("default-focal-ratio", boost::program_options::value(&OPT::defaultFocalRatio)->default_value(1.2f), "focal-length is set to ratio * max(width,height) for images with unknown focal-length")
 		("focal-length,f", boost::program_options::value(&OPT::focalLength)->default_value(0.f), "force focal-length (in pixels) for specified images (0 = disabled)")
+		("fixed-intrinsics", boost::program_options::value(&OPT::fixedIntrinsics)->default_value(false), "keep camera intrinsics fixed during reconstruction and bundle adjustment")
 		("k1", boost::program_options::value(&OPT::k1)->default_value(0.f), "force k1 distortion coefficient for specified images (0 = not used)")
 		("k2", boost::program_options::value(&OPT::k2)->default_value(0.f), "force k2 distortion coefficient for specified images (0 = not used)")
 		("image-indices", boost::program_options::value<std::string>(&OPT::strImageIndices), "image indices to apply forced parameters (e.g., '0 5-10 15', empty = all images)")
@@ -260,6 +262,17 @@ int main(int argc, LPCTSTR* argv)
 	cfg.thAlignGPS = OPT::thAlignGPS;
 	cfg.extractColors = OPT::bExtractColors;
 	cfg.clusterCfg.maxViewsPerCluster = OPT::maxViewsPerCluster;
+	if (OPT::fixedIntrinsics) {
+		cfg.baIntrinsicFlags = ReconstructionConfig::INTRINSIC_NONE;
+		cfg.initCfg.refineIntrinsics = false;
+		cfg.resectionCfg.refineIntrinsics = false;
+		cfg.resectionCfg.fullBAConfig.refineFocalLength = false;
+		cfg.resectionCfg.fullBAConfig.refineFocalLengthAspectRatio = false;
+		cfg.resectionCfg.fullBAConfig.refinePrincipalPoint = false;
+		cfg.resectionCfg.fullBAConfig.refineRadialDistortion123 = false;
+		cfg.resectionCfg.fullBAConfig.refineTangentialDistortion = false;
+		cfg.resectionCfg.fullBAConfig.refineRadialDistortion456 = false;
+	}
 
 	// Run SfM reconstruction
 	Scene scene(OPT::nMaxThreads);

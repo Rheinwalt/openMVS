@@ -389,11 +389,12 @@ bool StarInitializer::Initialize(
 		return false;
 	}
 
-	// 7. Bundle adjustment with intrinsics refinement
-	baConfig.RefineMainIntrinsics();
+	// 7. Bundle adjustment with optional intrinsics refinement
+	if (config.refineIntrinsics)
+		baConfig.RefineMainIntrinsics();
 	baConfig.maxIterations = 25;
 	if (!BundleAdjustment::Adjust(scene, baConfig)) {
-		VERBOSE("error: bundle adjustment with intrinsics refinement failed");
+		VERBOSE("error: bundle adjustment failed");
 		return false;
 	}
 
