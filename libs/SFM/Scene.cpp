@@ -317,8 +317,9 @@ bool Scene::Import(const String& source, const ImportConfig& config)
 		        images.size(), cameras.size(), numTrustedCameras);
 	}
 
-	// 2d) Apply forced focal length and distortion parameters to specified images (if configured)
-	if (config.focalLength > 0.f || config.k1 != 0.f || config.k2 != 0.f) {
+	// 2d) Apply forced intrinsic parameters to specified images (if configured)
+	const bool forcePrincipalPoint(config.principalPointX >= 0.f || config.principalPointY >= 0.f);
+	if (config.focalLength > 0.f || forcePrincipalPoint || config.k1 != 0.f || config.k2 != 0.f) {
 		IDXArr imageIndices;
 		if (config.imageIndicesStr.empty()) {
 			// Apply to all images
@@ -372,6 +373,10 @@ bool Scene::Import(const String& source, const ImportConfig& config)
 				PinholeCamera* newCamera = static_cast<PinholeCamera*>(pinholeCamera->Clone());
 				if (config.focalLength > 0.f)
 					newCamera->fx = newCamera->fy = config.focalLength;
+				if (config.principalPointX >= 0.f)
+					newCamera->cx = config.principalPointX;
+				if (config.principalPointY >= 0.f)
+					newCamera->cy = config.principalPointY;
 				if (config.k1 != 0.f)
 					newCamera->k1 = config.k1;
 				if (config.k2 != 0.f)
@@ -393,6 +398,10 @@ bool Scene::Import(const String& source, const ImportConfig& config)
 				// Camera only used by selected images - modify directly
 				if (config.focalLength > 0.f)
 					pinholeCamera->fx = pinholeCamera->fy = config.focalLength;
+				if (config.principalPointX >= 0.f)
+					pinholeCamera->cx = config.principalPointX;
+				if (config.principalPointY >= 0.f)
+					pinholeCamera->cy = config.principalPointY;
 				if (config.k1 != 0.f)
 					pinholeCamera->k1 = config.k1;
 				if (config.k2 != 0.f)
@@ -405,6 +414,9 @@ bool Scene::Import(const String& source, const ImportConfig& config)
 		if (config.focalLength > 0.f)
 			VERBOSE("Forced focal length %.2f pixels for %u cameras (%u duplicated)",
 			        config.focalLength, nModified, nDuplicated);
+		if (forcePrincipalPoint)
+			VERBOSE("Forced principal point (%.2f, %.2f) pixels for %u cameras (%u duplicated)",
+			        config.principalPointX, config.principalPointY, nModified, nDuplicated);
 		if (config.k1 != 0.f || config.k2 != 0.f)
 			VERBOSE("Forced distortion k1=%.6f, k2=%.6f for %u cameras (%u duplicated)",
 			        config.k1, config.k2, nModified, nDuplicated);

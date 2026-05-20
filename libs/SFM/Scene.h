@@ -40,6 +40,8 @@ struct SFM_API ImportConfig {
 	bool useExif = true;             // attempt to parse EXIF (tinyexif) if available
 	float defaultFocalRatio = 1.2f;  // fallback focal = ratio * max(width,height)
 	float focalLength = 0.f;         // force focal length (in pixels) for specified images (0 = disabled)
+	float principalPointX = -1.f;    // force principal point X in pixels (<0 = disabled)
+	float principalPointY = -1.f;    // force principal point Y in pixels (<0 = disabled)
 	float k1 = 0.f;                  // force k1 distortion coefficient (0 = not used)
 	float k2 = 0.f;                  // force k2 distortion coefficient (0 = not used)
 	String imageIndicesStr;          // image indices to apply forced parameters (empty = all images)
@@ -387,4 +389,3 @@ SFM_API bool CompareScenes(const Scene& scene, const String& gtFile, bool matchB
 } // namespace SFM
 
 #endif // _SFM_SCENE_H_
-

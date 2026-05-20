@@ -66,6 +66,8 @@ bool matchImagesOnly;
 float defaultFocalRatio;
 float focalLength;
 bool fixedIntrinsics;
+float principalPointX;
+float principalPointY;
 float k1;
 float k2;
 String strImageIndices;
@@ -144,6 +146,8 @@ bool Application::Initialize(size_t argc, LPCTSTR* argv)
 		("default-focal-ratio", boost::program_options::value(&OPT::defaultFocalRatio)->default_value(1.2f), "focal-length is set to ratio * max(width,height) for images with unknown focal-length")
 		("focal-length,f", boost::program_options::value(&OPT::focalLength)->default_value(0.f), "force focal-length (in pixels) for specified images (0 = disabled)")
 		("fixed-intrinsics", boost::program_options::value(&OPT::fixedIntrinsics)->default_value(false), "keep camera intrinsics fixed during reconstruction and bundle adjustment")
+		("principal-point-x", boost::program_options::value(&OPT::principalPointX)->default_value(-1.f), "force principal point X in pixels for specified images (<0 = disabled)")
+		("principal-point-y", boost::program_options::value(&OPT::principalPointY)->default_value(-1.f), "force principal point Y in pixels for specified images (<0 = disabled)")
 		("k1", boost::program_options::value(&OPT::k1)->default_value(0.f), "force k1 distortion coefficient for specified images (0 = not used)")
 		("k2", boost::program_options::value(&OPT::k2)->default_value(0.f), "force k2 distortion coefficient for specified images (0 = not used)")
 		("image-indices", boost::program_options::value<std::string>(&OPT::strImageIndices), "image indices to apply forced parameters (e.g., '0 5-10 15', empty = all images)")
@@ -235,6 +239,8 @@ int main(int argc, LPCTSTR* argv)
 	ReconstructionConfig cfg;
 	cfg.importCfg.defaultFocalRatio = OPT::defaultFocalRatio;
 	cfg.importCfg.focalLength = OPT::focalLength;
+	cfg.importCfg.principalPointX = OPT::principalPointX;
+	cfg.importCfg.principalPointY = OPT::principalPointY;
 	cfg.importCfg.k1 = OPT::k1;
 	cfg.importCfg.k2 = OPT::k2;
 	cfg.importCfg.imageIndicesStr = OPT::strImageIndices;
