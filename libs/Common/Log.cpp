@@ -16,6 +16,24 @@ using namespace SEACAVE;
 
 // S T R U C T S ///////////////////////////////////////////////////
 
+Log& Log::GetInstance()
+{
+	static Log instance;
+	return instance;
+}
+
+LogFile& LogFile::GetInstance()
+{
+	static LogFile instance;
+	return instance;
+}
+
+LogConsole& LogConsole::GetInstance()
+{
+	static LogConsole instance;
+	return instance;
+}
+
 /*-----------------------------------------------------------*
  * Log class implementation                                  *
  *-----------------------------------------------------------*/
