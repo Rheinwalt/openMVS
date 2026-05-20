@@ -47,6 +47,7 @@ struct SFM_API ResectionConfig
 	unsigned localBAEvery{10};          // Run local BA every N registered images (0 = disabled)
 	std::array<unsigned, 3> fullBAEvery{25, 50, 100}; // Run full BA every N registered images (0 = disabled)
 	unsigned minRefineExtIntrs{100};    // Min number of registered images to refine extended intrinsics in full BA (0 = disabled)
+	bool refineIntrinsics{true};        // Refine camera intrinsics during full BA
 
 	float ratioCorrespondences{0.3f};   // Min ratio of 2D-3D correspondences to best next image to accept for bundle resection (0 = disabled)
 	float avgInliersRatioForceBA{0.6f}; // Minimum resection average inliers ratio to force full BA (0 = disabled)

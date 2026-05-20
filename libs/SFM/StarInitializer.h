@@ -35,6 +35,7 @@ struct SFM_API StarInitConfig
 	float maxReprojError{6.f};      // Maximum reprojection error (pixels)
 	float minAngleThreshold{1.f};   // Minimum angle between cameras (degrees)
 	bool globalRotations{false};    // Use global rotation averaging to initialize rotations (optional)
+	bool refineIntrinsics{true};    // Refine camera intrinsics during initialization
 };
 
 /**
