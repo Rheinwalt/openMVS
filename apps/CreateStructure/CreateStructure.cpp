@@ -360,7 +360,15 @@ int main(int argc, LPCTSTR* argv)
 	// Export MVS scene
 	if (!OPT::strOutputFileNameMVS.empty()) {
 		SFM::ExportMVSConfig cfg;
-		cfg.undistortImageDir = MAKE_PATH("undistorted");
+		bool hasDistortion = false;
+		for (CameraPtr const cam : scene.cameras) {
+			if (cam != NULL && cam->HasDistortion()) {
+				hasDistortion = true;
+				break;
+			}
+		}
+		if (hasDistortion)
+			cfg.undistortImageDir = MAKE_PATH("undistorted");
 		cfg.undistortAlpha    = OPT::undistortAlpha;
 		if (!OPT::strUndistortExt.empty())
 			cfg.extension = OPT::strUndistortExt;
