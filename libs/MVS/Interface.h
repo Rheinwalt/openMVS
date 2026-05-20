@@ -269,8 +269,13 @@ bool SerializeLoad(_Tp& obj, const std::string& fileName, uint32_t* pVersion=NUL
 		stream.read((char*)&reserved, sizeof(uint32_t));
 	}
 	// serialize in the current state
-	ARCHIVE::ArchiveLoad serializer(stream, version);
-	serializer & obj;
+	try {
+		ARCHIVE::ArchiveLoad serializer(stream, version);
+		serializer & obj;
+	} catch (const std::exception& e) {
+		VERBOSE("error: invalid MVS interface stream (%s)", e.what());
+		return false;
+	}
 	if (pVersion)
 		*pVersion = version;
 	return true;
