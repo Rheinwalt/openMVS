@@ -312,7 +312,15 @@ int main(int argc, LPCTSTR* argv)
 	// Export MVS scene
 	if (!OPT::strOutputFileNameMVS.empty()) {
 		SFM::ExportMVSConfig cfg;
-		cfg.undistortImageDir = MAKE_PATH("undistorted");
+		bool hasDistortion = false;
+		for (CameraPtr const cam : scene.cameras) {
+			if (cam != NULL && cam->HasDistortion()) {
+				hasDistortion = true;
+				break;
+			}
+		}
+		if (hasDistortion)
+			cfg.undistortImageDir = MAKE_PATH("undistorted");
 		cfg.undistortAlpha    = OPT::undistortAlpha;
 		if (!ExportMVS(MAKE_PATH_SAFE(OPT::strOutputFileNameMVS), scene, cfg)) {
 			VERBOSE("error: failed to export MVS file to %s", OPT::strOutputFileNameMVS.c_str());
