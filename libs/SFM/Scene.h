@@ -53,6 +53,7 @@ struct SFM_API ImportConfig {
 	// ResolveFramesConvention(), which can only resolve it once the pairs are matched
 	FramesConvention framesConvention = FramesConvention::AUTO;
 	String importGCPsCSV;            // import ground control points from CSV file (optional)
+	String importCameraPriorsCSV;    // import camera center priors from CSV file (optional)
 	ARCHIVE_TYPE archiveType = ARCHIVE_DEFAULT; // archive type for loading/saving scenes
 };
 
@@ -122,6 +123,7 @@ struct SFM_API ReconstructionConfig {
 
 	float thAlignGPS{5.f}; // threshold for aligning to GPS (meters)
 	float thAlignGCP{5.f}; // threshold for aligning to GCPs (map units, 0 = disabled)
+	float thAlignCameraPriors{50.f}; // threshold for aligning camera centers to priors (map units, 0 = disabled)
 	bool extractColors{false}; // extract colors for reconstructed points
 	bool estimatePoseUncertainty{false}; // record per-image pose uncertainty from the last global bundle adjustment
 
@@ -146,6 +148,12 @@ struct SFM_API GroundControlPoint {
 	CLISTDEF0(Observation) observations;
 };
 typedef CLISTDEF2(GroundControlPoint) GroundControlPointArr;
+
+struct SFM_API CameraPrior {
+	IIndex imageID{NO_ID};
+	Point3 position;
+};
+typedef CLISTDEF2(CameraPrior) CameraPriorArr;
 
 
 // Scene contains all data for a Structure-from-Motion reconstruction:
@@ -179,6 +187,9 @@ public:
 	std::unordered_map<IIndex, Pose3D> priorPoses;
 	// Optional ground control points imported from CSV
 	GroundControlPointArr gcps;
+
+	// Optional camera center priors imported from CSV
+	CameraPriorArr cameraPriors;
 
 	// Optional transformation used to convert from absolute to relative coordinate system
 	Matrix4x4 transform;
@@ -359,6 +370,7 @@ public:
 	 */
 	bool AlignToGPS(double threshold = 0.0);
 	bool AlignToGCP(double threshold = 0.0);
+	bool AlignToCameraPriors(double threshold = 0.0);
 
 	/**
 	 * @brief Align the refined reconstruction back to the coordinate frame of the imported
@@ -484,6 +496,9 @@ SFM_API bool CompareScenes(const Scene& scene, const String& gtFile, bool matchB
  */
 SFM_API REAL MedianNearestCameraDistance(BS::light_thread_pool& threadPool, const Point3Arr& centers);
 SFM_API unsigned ImportGroundControlPointsCSV(const String& fileName, const ImageArr& images, GroundControlPointArr& gcps);
+/*----------------------------------------------------------------*/
+
+SFM_API unsigned ImportCameraPriorsCSV(const String& fileName, const ImageArr& images, CameraPriorArr& cameraPriors);
 /*----------------------------------------------------------------*/
 
 } // namespace SFM

@@ -60,6 +60,7 @@ String strExportPairsCSV;
 String strImportROMA2Path;
 String strCompareMVS;
 String strImportGCPCSV;
+String strImportCameraPriorsCSV;
 int matchMode;
 unsigned importPosesMode;
 unsigned matchSequenceOverlap;
@@ -87,6 +88,7 @@ float thAlignGPS;
 double gpsPositionWeight;
 double gpsPositionWeightZ;
 float thAlignGCP;
+float thAlignCameraPriors;
 unsigned nMaxThreads;
 int nArchiveType;
 int nProcessPriority;
@@ -145,6 +147,7 @@ bool Application::Initialize(size_t argc, LPCTSTR* argv)
 		("export-openmvg-dir", boost::program_options::value<std::string>(&OPT::strExportOpenMVGDir), "export OpenMVG features to directory (optional)")
 		("export-pairs-csv", boost::program_options::value<std::string>(&OPT::strExportPairsCSV), "export image pairs to CSV file (optional)")
 		("import-gcp-csv", boost::program_options::value<std::string>(&OPT::strImportGCPCSV), "import ground control points from CSV file (optional)")
+		("import-camera-priors-csv", boost::program_options::value<std::string>(&OPT::strImportCameraPriorsCSV), "import camera center priors from CSV file (optional)")
 		("import-roma2", boost::program_options::value<std::string>(&OPT::strImportROMA2Path), "import ROMA2 reconstruction from .npz files (folder or semicolon-separated list)")
 		("compare-mvs", boost::program_options::value<std::string>(&OPT::strCompareMVS), "compare reconstruction against ground-truth MVS file (optional)")
 		("max-features-per-cell", boost::program_options::value(&OPT::nMaxFeaturesPerCell)->default_value(3000), "maximum features per grid cell (3x3 grid)")
@@ -173,6 +176,7 @@ bool Application::Initialize(size_t argc, LPCTSTR* argv)
 		("gps-position-weight", boost::program_options::value(&OPT::gpsPositionWeight)->default_value(0.0), "horizontal weight of the GPS position priors used to refine the geo-aligned reconstruction (0 = disabled)")
 		("gps-position-weight-z", boost::program_options::value(&OPT::gpsPositionWeightZ)->default_value(0.0), "vertical weight of the GPS position priors used to refine the geo-aligned reconstruction (0 = disabled)")
 		("align-gcp-threshold", boost::program_options::value<float>(&OPT::thAlignGCP)->default_value(5.f), "maximum distance in map units for aligning GCPs to reconstruction points (0 = disabled)")
+		("align-camera-priors-threshold", boost::program_options::value<float>(&OPT::thAlignCameraPriors)->default_value(50.f), "maximum distance in map units for aligning camera centers to priors (0 = disabled)")
 		;
 
 	boost::program_options::options_description cmdline_options;
@@ -239,6 +243,7 @@ bool Application::Initialize(size_t argc, LPCTSTR* argv)
 	Util::ensureValidFolderPath(OPT::strExportOpenMVGDir);
 	Util::ensureValidPath(OPT::strExportPairsCSV);
 	Util::ensureValidPath(OPT::strImportGCPCSV);
+	Util::ensureValidPath(OPT::strImportCameraPriorsCSV);
 	Util::ensureValidPath(OPT::strImportROMA2Path);
 	Util::ensureValidPath(OPT::strCompareMVS);
 
@@ -281,6 +286,7 @@ int main(int argc, LPCTSTR* argv)
 	cfg.importCfg.importPosesMode = static_cast<SFM::PoseImportMode>(OPT::importPosesMode);
 	cfg.importCfg.framesConvention = OPT::knownPosesConvention;
 	cfg.importCfg.importGCPsCSV = OPT::strImportGCPCSV;
+	cfg.importCfg.importCameraPriorsCSV = OPT::strImportCameraPriorsCSV;
 	cfg.importCfg.archiveType = (ARCHIVE_TYPE)OPT::nArchiveType;
 	cfg.featuresCfg.detectorType = FeatureTypeFromString(OPT::strDetectorType);
 	cfg.featuresCfg.maxFeaturesPerCell = OPT::nMaxFeaturesPerCell;
@@ -305,6 +311,7 @@ int main(int argc, LPCTSTR* argv)
 	cfg.baConfig.gpsPositionWeightZ = OPT::gpsPositionWeightZ;
 	cfg.estimatePoseUncertainty = !OPT::strExportPoseQuality.empty();
 	cfg.thAlignGCP = OPT::thAlignGCP;
+	cfg.thAlignCameraPriors = OPT::thAlignCameraPriors;
 	cfg.extractColors = OPT::bExtractColors;
 	cfg.clusterCfg.maxViewsPerCluster = OPT::maxViewsPerCluster;
 	cfg.clusterCfg.useCommunityDetection = OPT::bClusterCommunities;
