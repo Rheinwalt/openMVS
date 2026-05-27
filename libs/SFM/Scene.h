@@ -52,6 +52,7 @@ struct SFM_API ImportConfig {
 	// AUTO imports the poses with the ARKit convention and defers the decision to
 	// ResolveFramesConvention(), which can only resolve it once the pairs are matched
 	FramesConvention framesConvention = FramesConvention::AUTO;
+	String importGCPsCSV;            // import ground control points from CSV file (optional)
 	ARCHIVE_TYPE archiveType = ARCHIVE_DEFAULT; // archive type for loading/saving scenes
 };
 
@@ -120,6 +121,7 @@ struct SFM_API ReconstructionConfig {
 	BAConfig baConfig;  // detailed BA configuration
 
 	float thAlignGPS{5.f}; // threshold for aligning to GPS (meters)
+	float thAlignGCP{5.f}; // threshold for aligning to GCPs (map units, 0 = disabled)
 	bool extractColors{false}; // extract colors for reconstructed points
 	bool estimatePoseUncertainty{false}; // record per-image pose uncertainty from the last global bundle adjustment
 
@@ -131,6 +133,19 @@ struct SFM_API ReconstructionConfig {
 			 importCfg.importPosesMode == PoseImportMode::POSES);
 	}
 };
+
+struct SFM_API GroundControlPoint {
+	struct Observation {
+		IIndex imageID{NO_ID};
+		Point2f point;
+	};
+
+	String label;
+	Point3 position;
+	Point3 accuracy{1, 1, 1};
+	CLISTDEF0(Observation) observations;
+};
+typedef CLISTDEF2(GroundControlPoint) GroundControlPointArr;
 
 
 // Scene contains all data for a Structure-from-Motion reconstruction:
@@ -162,6 +177,8 @@ public:
 	// refined reconstruction back to the input frame (Scene::AlignToPriorPoses).
 	// Transient: deliberately not serialized, but preserved by regular Scene copies and moves.
 	std::unordered_map<IIndex, Pose3D> priorPoses;
+	// Optional ground control points imported from CSV
+	GroundControlPointArr gcps;
 
 	// Optional transformation used to convert from absolute to relative coordinate system
 	Matrix4x4 transform;
@@ -341,6 +358,7 @@ public:
 	 * @return true if alignment was successful (requires at least 3 GPS positions)
 	 */
 	bool AlignToGPS(double threshold = 0.0);
+	bool AlignToGCP(double threshold = 0.0);
 
 	/**
 	 * @brief Align the refined reconstruction back to the coordinate frame of the imported
@@ -457,7 +475,6 @@ public:
 SFM_API bool CompareScenes(const Scene& scene, const String& gtFile, bool matchByName = true);
 /*----------------------------------------------------------------*/
 
-
 /**
  * @brief Median nearest-neighbor distance of the given camera centers
  *
@@ -466,6 +483,7 @@ SFM_API bool CompareScenes(const Scene& scene, const String& gtFile, bool matchB
  * @return 0 when fewer than two centers are given or they all coincide
  */
 SFM_API REAL MedianNearestCameraDistance(BS::light_thread_pool& threadPool, const Point3Arr& centers);
+SFM_API unsigned ImportGroundControlPointsCSV(const String& fileName, const ImageArr& images, GroundControlPointArr& gcps);
 /*----------------------------------------------------------------*/
 
 } // namespace SFM
