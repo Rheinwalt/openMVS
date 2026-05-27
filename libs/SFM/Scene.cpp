@@ -81,6 +81,7 @@ Scene& Scene::operator=(const Scene& scene) {
 	for (const Track& track : scene.tracks)
 		tracks.emplace_back(track);
 	gcps = scene.gcps;
+	cameraPriors = scene.cameraPriors;
 	// Copy status
 	transform = scene.transform;
 	obb = scene.obb;
@@ -98,6 +99,7 @@ Scene& Scene::operator=(Scene&& scene) noexcept {
 	tracks = std::move(scene.tracks);
 	colors = std::move(scene.colors);
 	gcps = std::move(scene.gcps);
+	cameraPriors = std::move(scene.cameraPriors);
 	transform = scene.transform;
 	obb = scene.obb;
 	status = scene.status;
@@ -112,6 +114,7 @@ void Scene::Release() {
 	tracks.Release();
 	colors.clear();
 	gcps.Release();
+	cameraPriors.Release();
 	transform = Matrix4x4::IDENTITY;
 	obb = OBB3(true);
 	status = Status();
@@ -204,6 +207,58 @@ unsigned SFM::ImportGroundControlPointsCSV(const String& fileName, const ImageAr
 	VERBOSE("Imported %u GCP observations for %u control points from '%s'",
 		numObservations, gcps.GetSize(), fileName.c_str());
 	return gcps.GetSize();
+}
+
+unsigned SFM::ImportCameraPriorsCSV(const String& fileName, const ImageArr& images, CameraPriorArr& cameraPriors)
+{
+	cameraPriors.Release();
+	std::ifstream is(fileName);
+	if (!is.is_open())
+		return 0;
+
+	std::unordered_map<String, IIndex> stemToIndex;
+	stemToIndex.reserve(images.size());
+	FOREACH(i, images)
+		stemToIndex.emplace(Util::getFileName(images[i].fileName), i);
+
+	String line;
+	if (!std::getline(is, line))
+		return 0;
+	if (!line.empty() && line[0] == '#' && !std::getline(is, line))
+		return 0;
+
+	unsigned numRows = 0;
+	while (std::getline(is, line)) {
+		if (line.empty())
+			continue;
+		std::vector<String> fields;
+		fields.reserve(6);
+		std::stringstream ss(line);
+		String token;
+		while (std::getline(ss, token, ','))
+			fields.push_back(token);
+		if (fields.size() < 6)
+			continue;
+		try {
+			const String stem(Util::getFileName(fields[0]));
+			const auto imgIt = stemToIndex.find(stem);
+			if (imgIt == stemToIndex.end())
+				continue;
+
+			CameraPrior& prior = cameraPriors.emplace_back();
+			prior.imageID = imgIt->second;
+			prior.position = Point3(
+				(REAL)std::stod(fields[4]),
+				(REAL)std::stod(fields[5]),
+				(REAL)std::stod(fields[3]));
+			++numRows;
+		} catch (const std::exception&) {
+			continue;
+		}
+	}
+
+	VERBOSE("Imported %u camera center priors from '%s'", numRows, fileName.c_str());
+	return cameraPriors.GetSize();
 }
 
 
@@ -365,7 +420,13 @@ bool Scene::Import(const String& source, const ImportConfig& config)
 			return false;
 		}
 
-		// 2d) Cluster identical cameras (exact match) and assign shared cameras
+		// 2d) Import camera center priors from CSV file (if configured)
+		if (!config.importCameraPriorsCSV.empty() && ImportCameraPriorsCSV(config.importCameraPriorsCSV, images, cameraPriors) == 0) {
+			VERBOSE("error: failed to import camera center priors from CSV file '%s'", config.importCameraPriorsCSV.c_str());
+			return false;
+		}
+
+		// 2e) Cluster identical cameras (exact match) and assign shared cameras
 		std::unordered_map<String, IIndex> camKeyToID;
 		auto cameraKey = [](const Camera* cam)->String {
 			const String type = CameraTypeToString(cam->GetType());
@@ -404,7 +465,7 @@ bool Scene::Import(const String& source, const ImportConfig& config)
 		        images.size(), cameras.size(), numTrustedCameras);
 	}
 
-	// 2e) Apply forced intrinsic parameters to specified images (if configured)
+	// 2f) Apply forced intrinsic parameters to specified images (if configured)
 	const bool forcePrincipalPoint(config.principalPointX >= 0.f || config.principalPointY >= 0.f);
 	if (config.focalLength > 0.f || forcePrincipalPoint || config.k1 != 0.f || config.k2 != 0.f) {
 		IDXArr imageIndices;
@@ -621,6 +682,10 @@ bool Scene::Reconstruct(const String& source, const ReconstructionConfig& config
 	// Run reconstruction method
 	if (config.useGlobalSolver ? !ReconstructGlobal(config) : !ReconstructHierarchical(config))
 		return false;
+
+	// Seed the arbitrary SfM frame from camera center priors before final GCP alignment.
+	if (config.thAlignCameraPriors > 0 && !cameraPriors.empty())
+		AlignToCameraPriors(config.thAlignCameraPriors);
 
 	// Align the arbitrary SfM frame to map/elevation coordinates before final BA.
 	const bool alignedToGCP = config.thAlignGCP > 0 && !gcps.empty() && AlignToGCP(config.thAlignGCP);
@@ -1021,6 +1086,40 @@ bool Scene::AlignToGCP(double threshold)
 	Transform(T_scene_to_map);
 	status.nState.set(Status::STATE::GEO_ALIGN);
 	VERBOSE("Scene aligned to GCPs: aligned %u control points (scale=%.4f)",
+		(unsigned)scenePoints.size(), T_scene_to_map.scale);
+	return true;
+}
+
+bool Scene::AlignToCameraPriors(double threshold)
+{
+	Point3Arr scenePoints;
+	Point3Arr mapPoints;
+	scenePoints.reserve(cameraPriors.GetSize());
+	mapPoints.reserve(cameraPriors.GetSize());
+
+	for (const CameraPrior& prior : cameraPriors) {
+		if (prior.imageID >= images.GetSize())
+			continue;
+		const Image& img = images[prior.imageID];
+		if (!img.IsValid())
+			continue;
+		scenePoints.push_back(img.C);
+		mapPoints.push_back(prior.position);
+	}
+
+	if (scenePoints.size() < 3) {
+		VERBOSE("error: insufficient camera center priors (found %u, need 3+)", (unsigned)scenePoints.size());
+		return false;
+	}
+
+	SEACAVE::Transform T_scene_to_map;
+	if (EstimateSimilarityTransform(scenePoints, mapPoints, T_scene_to_map, threshold) == 0) {
+		VERBOSE("error: failed to estimate camera-prior alignment transform");
+		return false;
+	}
+	Transform(T_scene_to_map);
+	status.nState.set(Status::STATE::GEO_ALIGN);
+	VERBOSE("Scene aligned to camera center priors: aligned %u cameras (scale=%.4f)",
 		(unsigned)scenePoints.size(), T_scene_to_map.scale);
 	return true;
 }
