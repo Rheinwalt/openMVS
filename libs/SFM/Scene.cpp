@@ -80,6 +80,7 @@ Scene& Scene::operator=(const Scene& scene) {
 	// Copy tracks
 	for (const Track& track : scene.tracks)
 		tracks.emplace_back(track);
+	gcps = scene.gcps;
 	// Copy status
 	transform = scene.transform;
 	obb = scene.obb;
@@ -96,6 +97,7 @@ Scene& Scene::operator=(Scene&& scene) noexcept {
 	pairs = std::move(scene.pairs);
 	tracks = std::move(scene.tracks);
 	colors = std::move(scene.colors);
+	gcps = std::move(scene.gcps);
 	transform = scene.transform;
 	obb = scene.obb;
 	status = scene.status;
@@ -621,11 +623,11 @@ bool Scene::Reconstruct(const String& source, const ReconstructionConfig& config
 		return false;
 
 	// Align the arbitrary SfM frame to map/elevation coordinates before final BA.
-	if (config.thAlignGCP > 0 && !gcps.empty())
-		AlignToGCP(config.thAlignGCP);
+	const bool alignedToGCP = config.thAlignGCP > 0 && !gcps.empty() && AlignToGCP(config.thAlignGCP);
 
 	// Pre-final global bundle adjustment
 	BAConfig finalBaCfg = config.baConfig;
+	finalBaCfg.useGCPConstraints = alignedToGCP;
 	finalBaCfg.maxIterations = 25;
 	finalBaCfg.refineFocalLength = (config.baIntrinsicFlags & ReconstructionConfig::INTRINSIC_FOCAL_LENGTH) != 0;
 	finalBaCfg.refineRadialDistortion123 = (config.baIntrinsicFlags & ReconstructionConfig::INTRINSIC_RADIAL_DIST_123) != 0;
