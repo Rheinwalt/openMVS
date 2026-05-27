@@ -46,6 +46,7 @@ struct SFM_API BAConfig
 	double gpsPositionWeight = 0.0;     // Horizontal GPS constraint weight
 	double gpsPositionWeightZ = 0.0;    // Vertical GPS constraint weight
 	double gpsWeightScaleFactor = 1.0;  // Manual scaling override for GPS weights
+	double gcpPositionWeight = 1.0;     // Ground control point coordinate prior weight
 
 	// Angular reprojection error with keypoint confidence weighting
 	bool useKeypointConfidence = false; // Weight observations by keypoint response and size

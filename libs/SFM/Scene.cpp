@@ -109,6 +109,7 @@ void Scene::Release() {
 	pairs.Release();
 	tracks.Release();
 	colors.clear();
+	gcps.Release();
 	transform = Matrix4x4::IDENTITY;
 	obb = OBB3(true);
 	status = Status();
@@ -123,6 +124,84 @@ bool Scene::HasImagesWithGPS(bool validOnly) const {
 			return true;
 	}
 	return false;
+}
+
+unsigned SFM::ImportGroundControlPointsCSV(const String& fileName, const ImageArr& images, GroundControlPointArr& gcps)
+{
+	gcps.Release();
+	std::ifstream is(fileName);
+	if (!is.is_open())
+		return 0;
+
+	std::unordered_map<String, IIndex> stemToIndex;
+	stemToIndex.reserve(images.size());
+	FOREACH(i, images)
+		stemToIndex.emplace(Util::getFileName(images[i].fileName), i);
+
+	std::unordered_map<String, IIndex> labelToGCP;
+	String line;
+	if (!std::getline(is, line))
+		return 0;
+	if (!line.empty() && line[0] == '#' && !std::getline(is, line))
+		return 0;
+
+	unsigned numObservations = 0;
+	while (std::getline(is, line)) {
+		if (line.empty())
+			continue;
+		std::vector<String> fields;
+		fields.reserve(12);
+		std::stringstream ss(line);
+		String token;
+		while (std::getline(ss, token, ','))
+			fields.push_back(token);
+		if (fields.size() < 12)
+			continue;
+		try {
+			const String label(fields[0]);
+			const String stem(Util::getFileName(fields[1]));
+			const auto imgIt = stemToIndex.find(stem);
+			if (imgIt == stemToIndex.end())
+				continue;
+
+			GroundControlPoint::Observation obs;
+			obs.imageID = imgIt->second;
+			obs.point.x = std::stof(fields[2]);
+			obs.point.y = std::stof(fields[3]);
+
+			const Point3 position(
+				(REAL)std::stod(fields[4]),
+				(REAL)std::stod(fields[5]),
+				(REAL)std::stod(fields[8]));
+			const Point3 accuracy(
+				(REAL)MAXF(std::stod(fields[9]), 1e-6),
+				(REAL)MAXF(std::stod(fields[10]), 1e-6),
+				(REAL)MAXF(std::stod(fields[11]), 1e-6));
+
+			const auto inserted = labelToGCP.emplace(label, gcps.GetSize());
+			if (inserted.second) {
+				GroundControlPoint& gcp = gcps.emplace_back();
+				gcp.label = label;
+				gcp.position = position;
+				gcp.accuracy = accuracy;
+			}
+			gcps[inserted.first->second].observations.Insert(obs);
+			++numObservations;
+		} catch (const std::exception&) {
+			continue;
+		}
+	}
+
+	for (IIndex i = 0; i < gcps.GetSize(); ) {
+		if (gcps[i].observations.GetSize() < 2) {
+			gcps.RemoveAtMove(i);
+			continue;
+		}
+		++i;
+	}
+	VERBOSE("Imported %u GCP observations for %u control points from '%s'",
+		numObservations, gcps.GetSize(), fileName.c_str());
+	return gcps.GetSize();
 }
 
 
@@ -278,7 +357,13 @@ bool Scene::Import(const String& source, const ImportConfig& config)
 			DEBUG("Imported poses for %u images from CSV file '%s'", numPosesImported, config.importPosesCSV.c_str());
 		}
 
-		// 2c) Cluster identical cameras (exact match) and assign shared cameras
+		// 2c) Import ground control points from CSV file (if configured)
+		if (!config.importGCPsCSV.empty() && ImportGroundControlPointsCSV(config.importGCPsCSV, images, gcps) == 0) {
+			VERBOSE("error: failed to import GCPs from CSV file '%s'", config.importGCPsCSV.c_str());
+			return false;
+		}
+
+		// 2d) Cluster identical cameras (exact match) and assign shared cameras
 		std::unordered_map<String, IIndex> camKeyToID;
 		auto cameraKey = [](const Camera* cam)->String {
 			const String type = CameraTypeToString(cam->GetType());
@@ -317,7 +402,7 @@ bool Scene::Import(const String& source, const ImportConfig& config)
 		        images.size(), cameras.size(), numTrustedCameras);
 	}
 
-	// 2d) Apply forced intrinsic parameters to specified images (if configured)
+	// 2e) Apply forced intrinsic parameters to specified images (if configured)
 	const bool forcePrincipalPoint(config.principalPointX >= 0.f || config.principalPointY >= 0.f);
 	if (config.focalLength > 0.f || forcePrincipalPoint || config.k1 != 0.f || config.k2 != 0.f) {
 		IDXArr imageIndices;
@@ -534,6 +619,10 @@ bool Scene::Reconstruct(const String& source, const ReconstructionConfig& config
 	// Run reconstruction method
 	if (config.useGlobalSolver ? !ReconstructGlobal(config) : !ReconstructHierarchical(config))
 		return false;
+
+	// Align the arbitrary SfM frame to map/elevation coordinates before final BA.
+	if (config.thAlignGCP > 0 && !gcps.empty())
+		AlignToGCP(config.thAlignGCP);
 
 	// Pre-final global bundle adjustment
 	BAConfig finalBaCfg = config.baConfig;
@@ -869,6 +958,68 @@ bool Scene::AlignToGPS(double threshold)
 	status.nState.set(Status::STATE::GEO_ALIGN);
 	VERBOSE("Scene aligned to GPS: aligned %u images (scale=%.4f)",
 		(unsigned)camCenters.size(), T_cam_to_enu.scale);
+	return true;
+}
+
+bool Scene::AlignToGCP(double threshold)
+{
+	Point3Arr scenePoints;
+	Point3Arr mapPoints;
+	scenePoints.reserve(gcps.GetSize());
+	mapPoints.reserve(gcps.GetSize());
+
+	for (const GroundControlPoint& gcp : gcps) {
+		struct CameraData {
+			Matrix3x3::EMat DR;
+			Point3::EVec Dt;
+		};
+		std::vector<CameraData> cams;
+		cams.reserve(gcp.observations.GetSize());
+		for (const GroundControlPoint::Observation& obs : gcp.observations) {
+			if (obs.imageID >= images.GetSize())
+				continue;
+			const Image& img = images[obs.imageID];
+			if (!img.IsValid() || !img.HasCamera())
+				continue;
+			const Point3 dir = img.pCamera->UnprojectNormalized(Cast<REAL>(obs.point));
+			const Matrix3x3 Dcross(
+				0, -dir.z, dir.y,
+				dir.z, 0, -dir.x,
+				-dir.y, dir.x, 0);
+			cams.emplace_back(Dcross * img.R, -Dcross * img.GetT());
+		}
+		if (cams.size() < 2)
+			continue;
+
+		Eigen::MatrixXd A(2*cams.size(), 3);
+		Eigen::VectorXd b(2*cams.size());
+		for (size_t i = 0; i < cams.size(); ++i) {
+			A.row(2*i+0) = cams[i].DR.row(0);
+			b(2*i+0) = cams[i].Dt(0);
+			A.row(2*i+1) = cams[i].DR.row(1);
+			b(2*i+1) = cams[i].Dt(1);
+		}
+		const Point3 p(Point3::EVec(A.jacobiSvd(Eigen::ComputeThinU | Eigen::ComputeThinV).solve(b)));
+		if (!ISFINITE(p))
+			continue;
+		scenePoints.push_back(p);
+		mapPoints.push_back(gcp.position);
+	}
+
+	if (scenePoints.size() < 3) {
+		VERBOSE("error: insufficient triangulated GCPs (found %u, need 3+)", (unsigned)scenePoints.size());
+		return false;
+	}
+
+	SEACAVE::Transform T_scene_to_map;
+	if (EstimateSimilarityTransform(scenePoints, mapPoints, T_scene_to_map, threshold) == 0) {
+		VERBOSE("error: failed to estimate GCP alignment transform");
+		return false;
+	}
+	Transform(T_scene_to_map);
+	status.nState.set(Status::STATE::GEO_ALIGN);
+	VERBOSE("Scene aligned to GCPs: aligned %u control points (scale=%.4f)",
+		(unsigned)scenePoints.size(), T_scene_to_map.scale);
 	return true;
 }
 

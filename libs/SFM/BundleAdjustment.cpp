@@ -124,6 +124,8 @@ bool BundleAdjustment::Adjust(Scene& scene, const BAConfig& config)
 
 	// Add reprojection residuals
 	uint32_t numReprojResiduals = 0;
+	uint32_t numGCPReprojResiduals = 0;
+	uint32_t numGCPPriorResiduals = 0;
 	uint32_t numSkippedLowConfidence = 0;
 	UnsignedArr numReprojResidualsPerImage(scene.images.size());
 	numReprojResidualsPerImage.Memset(0);
@@ -183,6 +185,70 @@ bool BundleAdjustment::Adjust(Scene& scene, const BAConfig& config)
 			++numReprojResiduals;
 		}
 	}
+
+	std::vector<std::pair<const GroundControlPoint*, std::array<double, 3>>> gcpParams;
+	if (!scene.gcps.empty()) {
+		gcpParams.reserve(scene.gcps.size());
+		for (const GroundControlPoint& gcp : scene.gcps) {
+			if (gcp.observations.GetSize() < 2)
+				continue;
+			std::vector<const GroundControlPoint::Observation*> validObservations;
+			validObservations.reserve(gcp.observations.GetSize());
+			for (const GroundControlPoint::Observation& obs : gcp.observations) {
+				if (obs.imageID >= scene.images.GetSize())
+					continue;
+				const Image& img = scene.images[obs.imageID];
+				if (!img.IsValid())
+					continue;
+				validObservations.push_back(&obs);
+			}
+			if (validObservations.size() < 2)
+				continue;
+
+			gcpParams.emplace_back(&gcp, std::array<double, 3>{gcp.position.x, gcp.position.y, gcp.position.z});
+			auto& params = gcpParams.back().second;
+
+			problem.AddResidualBlock(
+				GCPPositionError::Create(
+					gcp.position.x, gcp.position.y, gcp.position.z,
+					gcp.accuracy.x, gcp.accuracy.y, gcp.accuracy.z,
+					config.gcpPositionWeight),
+				nullptr,
+				params.data());
+			++numGCPPriorResiduals;
+
+			for (const GroundControlPoint::Observation* pObs : validObservations) {
+				const GroundControlPoint::Observation& obs = *pObs;
+				const Image& img = scene.images[obs.imageID];
+				switch (img.GetCameraType()) {
+				case CameraType::PINHOLE: {
+					DoubleArr& intr = intrinsicParams.at(img.pCamera);
+					ceres::CostFunction* cost_function = PinholeReprojectionError::Create(obs.point.x, obs.point.y);
+					problem.AddResidualBlock(
+						cost_function,
+						loss_function,
+						poseParams.data() + obs.imageID * 7,
+						intr.data(),
+						params.data());
+				} break;
+				case CameraType::SPHERICAL: {
+					ceres::CostFunction* cost_function = SphericalAngularReprojectionError::Create(
+						obs.point.x, obs.point.y, img.pCamera->GetWidth(), img.pCamera->GetHeight());
+					problem.AddResidualBlock(
+						cost_function,
+						loss_function,
+						poseParams.data() + obs.imageID * 7,
+						params.data());
+				} break;
+				}
+				++numGCPReprojResiduals;
+			}
+		}
+		if (numGCPReprojResiduals > 0)
+			DEBUG("Added %u GCP reprojection residuals and %u GCP coordinate priors",
+				numGCPReprojResiduals, numGCPPriorResiduals);
+	}
+
 	if (config.useKeypointConfidence) {
 		DEBUG_EXTRA("Created %u reprojection residuals (%u skipped low-confidence)",
 		    numReprojResiduals, numSkippedLowConfidence);
@@ -348,8 +414,8 @@ bool BundleAdjustment::Adjust(Scene& scene, const BAConfig& config)
 			nGPSResiduals, lat0, lon0, alt0);
 	}
 
-	// Fix best connected camera (gauge freedom) - unless we have GPS constraints
-	if (nGPSResiduals == 0) {
+	// Fix best connected camera (gauge freedom) unless absolute priors already anchor the scene.
+	if (nGPSResiduals == 0 && numGCPPriorResiduals == 0) {
 		IIndex bestImgID = NO_ID;
 		FOREACH(i, scene.images) {
 			if (!scene.images[i].IsValid())
@@ -448,6 +514,14 @@ bool BundleAdjustment::Adjust(Scene& scene, const BAConfig& config)
 	FOREACH(i, scene.images)
 		if (scene.images[i].IsValid())
 			QuaternionAndCenterToPose3D(poseParams.data() + i * 7, scene.images[i]);
+
+	for (const auto& gcpParam : gcpParams) {
+		GroundControlPoint& gcp = const_cast<GroundControlPoint&>(*gcpParam.first);
+		gcp.position = Point3(
+			(REAL)gcpParam.second[0],
+			(REAL)gcpParam.second[1],
+			(REAL)gcpParam.second[2]);
+	}
 
 	// Update camera intrinsics if refined
 	if (config.IsRefiningIntrinsics() && !intrinsicParams.empty()) {

@@ -47,6 +47,7 @@ struct SFM_API ImportConfig {
 	String imageIndicesStr;          // image indices to apply forced parameters (empty = all images)
 	String importPosesCSV;           // import camera poses from CSV file (optional)
 	unsigned importPosesMode = 0;    // flags for importing camera poses from CSV: 0=all, 1=extrinsics only, 2=positions only
+	String importGCPsCSV;            // import ground control points from CSV file (optional)
 	ARCHIVE_TYPE archiveType = ARCHIVE_DEFAULT; // archive type for loading/saving scenes
 };
 
@@ -115,8 +116,22 @@ struct SFM_API ReconstructionConfig {
 	BAConfig baConfig;  // detailed BA configuration
 
 	float thAlignGPS{5.f}; // threshold for aligning to GPS (meters)
+	float thAlignGCP{5.f}; // threshold for aligning to GCPs (map units, 0 = disabled)
 	bool extractColors{false}; // extract colors for reconstructed points
 };
+
+struct SFM_API GroundControlPoint {
+	struct Observation {
+		IIndex imageID{NO_ID};
+		Point2f point;
+	};
+
+	String label;
+	Point3 position;
+	Point3 accuracy{1, 1, 1};
+	CLISTDEF0(Observation) observations;
+};
+typedef CLISTDEF2(GroundControlPoint) GroundControlPointArr;
 
 
 // Scene contains all data for a Structure-from-Motion reconstruction:
@@ -138,6 +153,9 @@ public:
 
 	// Optional per-track colors (aligned with tracks array)
 	Pixel8UArr colors;
+
+	// Optional ground control points imported from CSV
+	GroundControlPointArr gcps;
 
 	// Optional transformation used to convert from absolute to relative coordinate system
 	Matrix4x4 transform;
@@ -291,6 +309,7 @@ public:
 	 * @return true if alignment was successful (requires at least 3 GPS positions)
 	 */
 	bool AlignToGPS(double threshold = 0.0);
+	bool AlignToGCP(double threshold = 0.0);
 
 	/**
 	 * @brief Get ECEF centroid stored in trasform if the scene is aligned to GPS
@@ -384,6 +403,9 @@ public:
  * @return true if comparison succeeded (does not indicate quality)
  */
 SFM_API bool CompareScenes(const Scene& scene, const String& gtFile, bool matchByName = true);
+/*----------------------------------------------------------------*/
+
+SFM_API unsigned ImportGroundControlPointsCSV(const String& fileName, const ImageArr& images, GroundControlPointArr& gcps);
 /*----------------------------------------------------------------*/
 
 } // namespace SFM
