@@ -682,7 +682,7 @@ bool BundleAdjustment::Adjust()
 	}
 
 	std::vector<std::pair<const GroundControlPoint*, std::array<double, 3>>> gcpParams;
-	if (!scene.gcps.empty()) {
+	if (config.useGCPConstraints && !scene.gcps.empty()) {
 		gcpParams.reserve(scene.gcps.size());
 		for (const GroundControlPoint& gcp : scene.gcps) {
 			if (gcp.observations.GetSize() < 2)
@@ -739,9 +739,8 @@ bool BundleAdjustment::Adjust()
 				++numGCPReprojResiduals;
 			}
 		}
-		if (numGCPReprojResiduals > 0)
-			DEBUG("Added %u GCP reprojection residuals and %u GCP coordinate priors",
-				numGCPReprojResiduals, numGCPPriorResiduals);
+		DEBUG("Added %u GCP reprojection residuals and %u GCP coordinate priors",
+			numGCPReprojResiduals, numGCPPriorResiduals);
 	}
 
 	if (config.useKeypointConfidence) {
@@ -928,7 +927,7 @@ bool BundleAdjustment::Adjust()
 		}
 		if (bestImgID != NO_ID) {
 			problem.SetParameterBlockConstant(poseParams.data() + bestImgID * 7);
-			DEBUG("Fixed view %u (reference, no GPS)", bestImgID);
+			DEBUG("Fixed view %u (reference, no absolute position priors)", bestImgID);
 		}
 	}
 
@@ -1033,8 +1032,9 @@ bool BundleAdjustment::Adjust()
 		DEBUG("Updated intrinsics for %u cameras", (unsigned)intrinsicParams.size());
 	}
 
-	DEBUG("Bundle adjustment complete: %u reprojection residuals, %u GPS residuals, %.4g -> %.4g cost (%s)",
-	    numReprojResiduals, numGPSResiduals, summary.initial_cost, summary.final_cost, TD_TIMER_GET_FMT().c_str());
+	DEBUG("Bundle adjustment complete: %u reprojection residuals, %u GPS residuals, %u GCP reprojection residuals, %u GCP priors, %.4g -> %.4g cost (%s)",
+		numReprojResiduals, numGPSResiduals, numGCPReprojResiduals, numGCPPriorResiduals,
+		summary.initial_cost, summary.final_cost, TD_TIMER_GET_FMT().c_str());
 
 	// Report average reprojection errors
 	ComputeTracksMeanReprojectionError(scene);
