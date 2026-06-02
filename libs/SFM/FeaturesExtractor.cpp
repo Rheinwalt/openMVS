@@ -480,11 +480,9 @@ bool FeaturesExtractor::ExtractImage(Image& image, cv::Ptr<cv::Feature2D>& detec
 					orb->setFastThreshold(20); // Reset to default
 				} break;
 				case FeatureType::SIFT: {
-					cv::Ptr<cv::SIFT> sift = detector.dynamicCast<cv::SIFT>();
 					const double contrastThresholds[] = {0.03, 0.02, 0.015, 0.01, 0.005};
-					sift->setContrastThreshold(contrastThresholds[retry]);
+					cv::Ptr<cv::SIFT> sift = cv::SIFT::create(0, 3, contrastThresholds[retry]);
 					sift->detectAndCompute(cellImage, cv::noArray(), cellKeypoints, cellDescriptors);
-					sift->setContrastThreshold(0.04); // Reset to default
 				} break;
 				}
 			}
