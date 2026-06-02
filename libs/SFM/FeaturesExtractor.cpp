@@ -354,6 +354,7 @@ size_t FeaturesExtractor::Extract()
 
 		// Create per-thread detectors using thread-local storage
 		std::unordered_map<std::thread::id, cv::Ptr<cv::Feature2D>> detectors;
+		std::mutex detectorsMutex;
 		std::atomic<size_t> atomicNumFeatures{0};
 
 		scene.threadPool.detach_loop(IIndex(0), scene.images.size(), [&](IIndex i) {
@@ -362,8 +363,18 @@ size_t FeaturesExtractor::Extract()
 				++progress;
 				return;
 			}
-			if (ExtractImage(img, detectors[std::this_thread::get_id()]))
+			cv::Ptr<cv::Feature2D> detector;
+			const std::thread::id threadID(std::this_thread::get_id());
+			{
+				std::lock_guard<std::mutex> lock(detectorsMutex);
+				detector = detectors[threadID];
+			}
+			if (ExtractImage(img, detector))
 				atomicNumFeatures.fetch_add(img.keypoints.size(), std::memory_order_relaxed);
+			{
+				std::lock_guard<std::mutex> lock(detectorsMutex);
+				detectors[threadID] = detector;
+			}
 			++progress;
 		});
 
