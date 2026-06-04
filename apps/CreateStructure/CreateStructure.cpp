@@ -68,6 +68,10 @@ bool matchImagesOnly;
 float defaultFocalRatio;
 float focalLength;
 bool fixedIntrinsics;
+int fixedFocal;
+int fixedPrincipalPoint;
+int refineRadialDistortion;
+int refineTangentialDistortion;
 float principalPointX;
 float principalPointY;
 float k1;
@@ -152,6 +156,10 @@ bool Application::Initialize(size_t argc, LPCTSTR* argv)
 		("default-focal-ratio", boost::program_options::value(&OPT::defaultFocalRatio)->default_value(1.2f), "focal-length is set to ratio * max(width,height) for images with unknown focal-length")
 		("focal-length,f", boost::program_options::value(&OPT::focalLength)->default_value(0.f), "force focal-length (in pixels) for specified images (0 = disabled)")
 		("fixed-intrinsics", boost::program_options::value(&OPT::fixedIntrinsics)->default_value(false), "keep camera intrinsics fixed during reconstruction and bundle adjustment")
+		("fixed-focal", boost::program_options::value(&OPT::fixedFocal)->default_value(-1), "keep focal length fixed during reconstruction and bundle adjustment (-1 = default behavior, 0 = refine, 1 = fixed)")
+		("fixed-principal-point", boost::program_options::value(&OPT::fixedPrincipalPoint)->default_value(-1), "keep principal point fixed during reconstruction and bundle adjustment (-1 = default behavior, 0 = refine, 1 = fixed)")
+		("refine-radial", boost::program_options::value(&OPT::refineRadialDistortion)->default_value(-1), "refine k1/k2/k3 radial distortion during reconstruction and bundle adjustment (-1 = default behavior, 0 = fixed, 1 = refine)")
+		("refine-tangential", boost::program_options::value(&OPT::refineTangentialDistortion)->default_value(-1), "refine p1/p2 tangential distortion during reconstruction and bundle adjustment (-1 = default behavior, 0 = fixed, 1 = refine)")
 		("principal-point-x", boost::program_options::value(&OPT::principalPointX)->default_value(-1.f), "force principal point X in pixels for specified images (<0 = disabled)")
 		("principal-point-y", boost::program_options::value(&OPT::principalPointY)->default_value(-1.f), "force principal point Y in pixels for specified images (<0 = disabled)")
 		("k1", boost::program_options::value(&OPT::k1)->default_value(0.f), "force k1 distortion coefficient for specified images (0 = not used)")
@@ -282,6 +290,37 @@ int main(int argc, LPCTSTR* argv)
 	cfg.thAlignCameraPriors = OPT::thAlignCameraPriors;
 	cfg.extractColors = OPT::bExtractColors;
 	cfg.clusterCfg.maxViewsPerCluster = OPT::maxViewsPerCluster;
+	if (OPT::fixedFocal >= 0) {
+		if (OPT::fixedFocal)
+			cfg.baIntrinsicFlags &= ~ReconstructionConfig::INTRINSIC_FOCAL_LENGTH;
+		else
+			cfg.baIntrinsicFlags |= ReconstructionConfig::INTRINSIC_FOCAL_LENGTH;
+		cfg.resectionCfg.fullBAConfig.refineFocalLength = !OPT::fixedFocal;
+		cfg.resectionCfg.fullBAConfig.refineFocalLengthAspectRatio = !OPT::fixedFocal;
+	}
+	if (OPT::fixedPrincipalPoint >= 0) {
+		if (OPT::fixedPrincipalPoint)
+			cfg.baIntrinsicFlags &= ~ReconstructionConfig::INTRINSIC_PRINCIPAL_POINT;
+		else
+			cfg.baIntrinsicFlags |= ReconstructionConfig::INTRINSIC_PRINCIPAL_POINT;
+		cfg.resectionCfg.fullBAConfig.refinePrincipalPoint = !OPT::fixedPrincipalPoint;
+	}
+	if (OPT::refineRadialDistortion >= 0) {
+		if (OPT::refineRadialDistortion)
+			cfg.baIntrinsicFlags |= ReconstructionConfig::INTRINSIC_RADIAL_DIST_123;
+		else
+			cfg.baIntrinsicFlags &= ~ReconstructionConfig::INTRINSIC_RADIAL_DIST_123;
+		cfg.resectionCfg.fullBAConfig.refineRadialDistortion123 = OPT::refineRadialDistortion != 0;
+	}
+	if (OPT::refineTangentialDistortion >= 0) {
+		if (OPT::refineTangentialDistortion)
+			cfg.baIntrinsicFlags |= ReconstructionConfig::INTRINSIC_TANGENTIAL_DIST;
+		else
+			cfg.baIntrinsicFlags &= ~ReconstructionConfig::INTRINSIC_TANGENTIAL_DIST;
+		cfg.resectionCfg.fullBAConfig.refineTangentialDistortion = OPT::refineTangentialDistortion != 0;
+	}
+	cfg.initCfg.refineIntrinsics = cfg.baIntrinsicFlags != ReconstructionConfig::INTRINSIC_NONE;
+	cfg.resectionCfg.refineIntrinsics = cfg.baIntrinsicFlags != ReconstructionConfig::INTRINSIC_NONE;
 	if (OPT::fixedIntrinsics) {
 		cfg.baIntrinsicFlags = ReconstructionConfig::INTRINSIC_NONE;
 		cfg.initCfg.refineIntrinsics = false;
