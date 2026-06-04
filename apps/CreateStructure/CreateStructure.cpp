@@ -331,6 +331,11 @@ int main(int argc, LPCTSTR* argv)
 		cfg.matchCfg.mode = MatchConfig::KNOWN_POSES;
 		VERBOSE("Known camera poses imported: pose-guided pair selection auto-selected (use --match-mode to override)");
 	}
+	const bool explicitIntrinsicControls =
+		OPT::fixedFocal >= 0 ||
+		OPT::fixedPrincipalPoint >= 0 ||
+		OPT::refineRadialDistortion >= 0 ||
+		OPT::refineTangentialDistortion >= 0;
 	if (OPT::fixedFocal >= 0) {
 		if (OPT::fixedFocal)
 			cfg.baIntrinsicFlags &= ~ReconstructionConfig::INTRINSIC_FOCAL_LENGTH;
@@ -362,6 +367,13 @@ int main(int argc, LPCTSTR* argv)
 	}
 	cfg.initCfg.refineIntrinsics = cfg.baIntrinsicFlags != ReconstructionConfig::INTRINSIC_NONE;
 	cfg.resectionCfg.refineIntrinsics = cfg.baIntrinsicFlags != ReconstructionConfig::INTRINSIC_NONE;
+	if (explicitIntrinsicControls) {
+		// Star initialization and resection use coarse "main/extended intrinsics"
+		// helpers that always include focal length. Keep explicit CLI masks intact
+		// by refining the requested subset in the regular BA stages instead.
+		cfg.initCfg.refineIntrinsics = false;
+		cfg.resectionCfg.refineIntrinsics = false;
+	}
 	if (OPT::fixedIntrinsics) {
 		cfg.baIntrinsicFlags = ReconstructionConfig::INTRINSIC_NONE;
 		cfg.initCfg.refineIntrinsics = false;
