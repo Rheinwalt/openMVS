@@ -49,6 +49,7 @@ String strSource;
 String strOutputFileName;
 String strOutputFileNameMVS;
 String strDetectorType;
+String strUndistortExtension;
 String strImportPosesCSV;
 String strExportPosesCSV;
 String strImportOpenMVGDir;
@@ -134,6 +135,7 @@ bool Application::Initialize(size_t argc, LPCTSTR* argv)
 		("source,s", boost::program_options::value<std::string>(&OPT::strSource), "source folder or semicolon-separated list of images")
 		("output-file,o", boost::program_options::value<std::string>(&OPT::strOutputFileName), "output scene file path")
 		("export-mvs", boost::program_options::value<std::string>(&OPT::strOutputFileNameMVS), "output MVS file path (optional)")
+		("undistort-extension", boost::program_options::value<std::string>(&OPT::strUndistortExtension)->default_value(".png"), "output extension for undistorted images exported with MVS")
 		("detector-type,t", boost::program_options::value<std::string>(&OPT::strDetectorType)->default_value(FeatureTypeToString(FeatureType::DEFAULT)), "feature detector type: AKAZE, ORB, SIFT or SIFTGPU")
 		("import-poses-csv", boost::program_options::value<std::string>(&OPT::strImportPosesCSV)->default_value("poses.csv"), "import camera poses from CSV file (optional)")
 		("export-poses-csv", boost::program_options::value<std::string>(&OPT::strExportPosesCSV), "export camera poses to CSV file (optional)")
@@ -290,6 +292,11 @@ int main(int argc, LPCTSTR* argv)
 	cfg.thAlignCameraPriors = OPT::thAlignCameraPriors;
 	cfg.extractColors = OPT::bExtractColors;
 	cfg.clusterCfg.maxViewsPerCluster = OPT::maxViewsPerCluster;
+	const bool explicitIntrinsicControls =
+		OPT::fixedFocal >= 0 ||
+		OPT::fixedPrincipalPoint >= 0 ||
+		OPT::refineRadialDistortion >= 0 ||
+		OPT::refineTangentialDistortion >= 0;
 	if (OPT::fixedFocal >= 0) {
 		if (OPT::fixedFocal)
 			cfg.baIntrinsicFlags &= ~ReconstructionConfig::INTRINSIC_FOCAL_LENGTH;
@@ -321,6 +328,13 @@ int main(int argc, LPCTSTR* argv)
 	}
 	cfg.initCfg.refineIntrinsics = cfg.baIntrinsicFlags != ReconstructionConfig::INTRINSIC_NONE;
 	cfg.resectionCfg.refineIntrinsics = cfg.baIntrinsicFlags != ReconstructionConfig::INTRINSIC_NONE;
+	if (explicitIntrinsicControls) {
+		// Star initialization and resection use coarse "main/extended intrinsics"
+		// helpers that always include focal length. Keep explicit CLI masks intact
+		// by refining the requested subset in the regular BA stages instead.
+		cfg.initCfg.refineIntrinsics = false;
+		cfg.resectionCfg.refineIntrinsics = false;
+	}
 	if (OPT::fixedIntrinsics) {
 		cfg.baIntrinsicFlags = ReconstructionConfig::INTRINSIC_NONE;
 		cfg.initCfg.refineIntrinsics = false;
@@ -374,6 +388,7 @@ int main(int argc, LPCTSTR* argv)
 		}
 		if (hasDistortion)
 			cfg.undistortImageDir = MAKE_PATH("undistorted");
+		cfg.extension          = OPT::strUndistortExtension;
 		cfg.undistortAlpha    = OPT::undistortAlpha;
 		if (!ExportMVS(MAKE_PATH_SAFE(OPT::strOutputFileNameMVS), scene, cfg)) {
 			VERBOSE("error: failed to export MVS file to %s", OPT::strOutputFileNameMVS.c_str());
