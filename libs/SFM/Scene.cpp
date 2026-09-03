@@ -714,7 +714,11 @@ bool Scene::Reconstruct(const String& source, const ReconstructionConfig& config
 	// Filter weakly connected images and resection remaining images into the reconstruction
 	FilterWeaklyConnectedImages(*this);
 	if (status.nCalibratedImages < images.size()) {
-		Resection resection(*this, config.resectionCfg);
+		ResectionConfig resectionCfg(config.resectionCfg);
+		// Keep the scene tied to map coordinates during all full BA passes in resection,
+		// including the final pass performed after registration stops.
+		resectionCfg.fullBAConfig.useGCPConstraints = alignedToGCP;
+		Resection resection(*this, resectionCfg);
 		resection.RegisterImages();
 		FilterWeaklyConnectedImages(*this);
 	}
